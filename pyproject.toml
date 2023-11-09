@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+
+[project]
+name = "pyrast"
+authors = [
+    { name="philgras" }
+]
+description = "A Numpy based 3D rasterizer"
+dependencies = [
+    "numpy"
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["matplotlib"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyrast.__version__"}
+
