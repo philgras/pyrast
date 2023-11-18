@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 import numpy as np
 
-from pyrast.geometry.scene import Camera, Mesh
+from pyrast.geometry.scene import *
 
 
 def batch_bilinear_interpolate(points, a, b):
@@ -60,6 +60,7 @@ class Render:
             "barycoords": barycoords,
             "z_buffer": z_buffer,
             "pix2face": pix2face,
+            "mask_img": pix2face > -1,
             "mesh": mesh,
             "cam": cam,
             "light": light,
@@ -81,7 +82,11 @@ class Shader(ABC):
 
 class NormalShader(Shader):
 
-    def __call__(self, mesh: Mesh, pix2face, barycoords, **kwargs):
+    def __init__(self, use_vertex_normals=True):
+        self._use_vertex_normals = use_vertex_normals
+
+    def __call__(self, mesh: Mesh, pix2face,
+                 barycoords, mask_img, **kwargs):
         """
         Computes normal vector of mesh per rasterized pixel
         Args:
@@ -94,18 +99,48 @@ class NormalShader(Shader):
 
         """
         outputs = {}
-        vertex_normals = mesh.vertex_normals()
-        normal_img = interpolate_attributes(
-            pix2face, barycoords, vertex_normals[mesh.faces])
-        outputs["vertex_normals"] = vertex_normals
+        if self._use_vertex_normals:
+            vertex_normals = mesh.vertex_normals()
+            normal_img = interpolate_attributes(
+                pix2face,
+                barycoords,
+                vertex_normals[mesh.faces]
+            )
+            outputs["vertex_normals"] = vertex_normals
+        else:
+            face_normals = mesh.face_normals()
+            normal_img = np.zeros_like(barycoords)
+            normal_img[mask_img] = face_normals[pix2face[mask_img]]
+            outputs["face_normals"] = face_normals
         outputs["normal_img"] = normal_img
         return outputs
 
 
+class VertexImageShader(Shader):
+    def __call__(self, mesh, pix2face, barycoords, mask_img, **kwargs):
+        out = np.zeros_like(barycoords)
+        mask = mask_img
+        face_idx = pix2face[mask]
+        faces = mesh.faces[face_idx]
+        face_verts = mesh.vertices[faces]
+        points = face_verts * barycoords[mask][..., None]
+        points = points.sum(axis=-2)
+        out[mask] = points
+        return {"point_img": out}
+
+
+class UVShader(Shader):
+    def __call__(self, mesh, pix2face, barycoords, **kwargs):
+        face_uvs = mesh.face_attrs['face_uvs']
+        uv_image = interpolate_attributes(pix2face, barycoords, face_uvs)
+        return {"uv_img": uv_image}
+
+
 class TextureShader(Shader):
 
-    def __init__(self, interpolation_mode="bilinear") -> None:
+    def __init__(self, texture_names=None, interpolation_mode="bilinear") -> None:
         super().__init__()
+        self.texture_names = texture_names
         if interpolation_mode == "bilinear":
             self._interpolate = batch_bilinear_interpolate
         elif interpolation_mode == "nearest":
@@ -114,10 +149,7 @@ class TextureShader(Shader):
             raise RuntimeError(
                 f"Invalid interpolation mode: {interpolation_mode}")
 
-    def sample_texture(self, mesh, pix2face, bary_coords):
-        face_uvs = mesh.face_attrs['face_uvs']
-        tex = mesh.texture
-        uv_image = interpolate_attributes(pix2face, bary_coords, face_uvs)
+    def sample_texture(self, tex, uv_image, pix2face):
         mask = pix2face > -1
 
         img_H, img_W = pix2face.shape[:2]
@@ -145,12 +177,79 @@ class TextureShader(Shader):
         res[mask] = colors
         return res
 
-    def __call__(self, mesh, pix2face, barycoords, **kwargs):
-        texture_img = self.sample_texture(mesh, pix2face, barycoords)
-        return {"texture_img": texture_img}
+    def __call__(self, mesh, uv_img, pix2face, **kwargs):
+        if self.texture_names is None:
+            names = list(mesh.textures.keys())
+        else:
+            names = self.texture_names
+
+        out = {}
+        for name in names:
+            texture = mesh.textures[name]
+            texture_img = self.sample_texture(texture, uv_img, pix2face)
+            out[name] = texture_img
+        return out
 
 
 class PhongShader(Shader):
+    def __call__(self, mesh: Mesh, cam: Camera, light: DirectionalLight, normal_img, point_img, mask_img, **kwargs):
+        material = mesh.material
 
-    def __call__(self, mesh, cam, light, texture_img, normal_img):
-        return super().__call__(*args, **kwargs)
+        # set the material colors
+        # diffuse
+        if "diffuse" in kwargs:
+            diffuse = kwargs["diffuse"][mask_img]
+        else:
+            diffuse = material.diffuse[None]
+
+        # ambient
+        if material.ambient is None:
+            ambient = diffuse
+        else:
+            ambient = material.ambient[None]
+
+        # specular
+        if material.specular is None:
+            specular = light.color[None]
+        else:
+            specular = material.specular[None]
+
+        shininess = material.shininess
+        normal = normal_img[mask_img]
+
+        # ambient
+        out = np.zeros_like(normal_img)
+        out[mask_img] = light.ambient_intensity[None] * ambient
+
+        # diffuse
+        light_direction = light.normalized_direction()[None]
+        factor = np.sum(normal * light_direction, axis=-1)
+        factor = np.clip(factor, 0, None)
+        out[mask_img] += light.diffuse_intensity[None] * diffuse * factor[..., None]
+
+        # specular
+        # compute view direction
+        points = point_img[mask_img]
+        view_direction = cam.t - points
+        norm = np.linalg.norm(view_direction, axis=-1)
+        assert np.all(norm > 1e-5)
+        view_direction = view_direction / norm[..., None]
+
+        # compute reflect direction
+        reflect_direction = 2 * factor[..., None] * normal - light_direction
+        norm = np.linalg.norm(reflect_direction, axis=-1)
+        assert np.all(norm > 1e-5)
+        reflect_direction = reflect_direction / norm[..., None]
+
+        # compute specular
+        factor = np.sum(view_direction * reflect_direction,
+                        axis=-1)
+        factor = np.clip(factor, 0, None) ** shininess
+        normalizer = (shininess + 2) / 2 * np.pi
+
+        out[mask_img] += normalizer * light.specular_intensity[None] * \
+            specular * factor[..., None]
+        out2 = np.zeros_like(out[..., 0])
+        out2[mask_img] = factor
+
+        return {"shaded_img": np.clip(out, 0., 1.)}

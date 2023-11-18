@@ -1,3 +1,4 @@
+from pyrast.geometry.scene import Mesh
 import numpy as np
 
 
@@ -23,7 +24,8 @@ def load_obj(filepath):
 
     face_uvs = vert_uvs[faces[:, :, 1]]
     faces = faces[:, :, 0]
-    return Mesh(vertices,
-                faces,
-                face_attrs={'face_uvs': face_uvs},
-                texture=gen_checkerboard_texture(16, 256))
+    return Mesh(
+        vertices,
+        faces,
+        face_attrs={'face_uvs': face_uvs}
+    )

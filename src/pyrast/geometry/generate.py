@@ -1,4 +1,4 @@
-from .scene import Mesh
+from .scene import Material, Mesh
 import numpy as np
 
 
@@ -11,7 +11,7 @@ def create_checkerboard_texture(repeats=4, dim=256):
 
     Returns:
         texture of shape dim x dim x 3
-        
+
     """
     pattern = np.array([[0, 1], [1, 0]], dtype=float)
     tex = np.tile(pattern, (repeats, repeats))[..., None]
@@ -36,7 +36,7 @@ def create_cube():
     """
     Creates a unit cube, with uvs and checkerboard texture
     Returns:
-       Cube mesh 
+       Cube mesh
     """
     # define a triangle cube
     verts = np.array([
@@ -80,6 +80,9 @@ def create_cube():
         [[-0.25, -1], [0.25, -0.5], [0.25, -1]]      # top
     ], dtype=float)
 
-    tex = create_checkerboard_texture(repeats=16, dim=256)
 
-    return Mesh(verts, faces, face_attrs={'face_uvs': face_uvs}, texture=tex)
+    return Mesh(
+        verts,
+        faces,
+        face_attrs={'face_uvs': face_uvs}
+    )

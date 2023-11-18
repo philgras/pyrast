@@ -72,8 +72,109 @@ class SceneObject:
         return RT
 
 
+class Material:
+    def __init__(self, ambient=None, diffuse=(0.5, 0.5, 0.5), specular=None,
+                 shininess=16):
+        self.ambient = np.array(ambient) if ambient is not None else None
+        self.diffuse = np.array(diffuse)
+        self.specular = np.array(specular) if specular is not None else None
+        self.shininess = shininess
+
+    # material properties taken from
+    # http://learnwebgl.brown37.net/10_surface_properties/surface_properties_color.html
+    @staticmethod
+    def Brass():
+        return Material(
+            ambient=(0.329, 0.223, 0.027),
+            diffuse=(0.78, 0.568, 0.113),
+            specular=(0.992, 0.941, 0.807),
+            shininess=27.897,
+        )
+
+    @staticmethod
+    def Bronze():
+        return Material(
+            ambient=(0.212, 0.1275, 0.054),
+            diffuse=(0.714, 0.428, 0.181),
+            specular=(0.3935, 0.271, 0.166),
+            shininess=25.6,
+        )
+
+    @staticmethod
+    def Copper():
+        return Material(
+            ambient=(0.191, 0.07, 0.0225),
+            diffuse=(0.703, 0.270, 0.0828),
+            specular=(0.2567, 0.127, 0.086),
+            shininess=12.8,
+        )
+
+    @staticmethod
+    def Chrome():
+        return Material(
+            ambient=(0.25, 0.25, 0.25),
+            diffuse=(0.4, 0.4, 0.4),
+            specular=(0.774, 0.774, 0.774),
+            shininess=76.8,
+        )
+
+    @staticmethod
+    def Gold():
+        return Material(
+            ambient=(0.24, 0.199, 0.07),
+            diffuse=(0.7516, 0.606, 0.22),
+            specular=(0.628, 0.555, 0.366),
+            shininess=51.2,
+        )
+
+    @staticmethod
+    def PolishedGold():
+        return Material(
+            ambient=(0.24, 0.22, 0.06),
+            diffuse=(0.34, 0.31, 0.09),
+            specular=(0.797, 0.723, 0.208),
+            shininess=83.2,
+        )
+
+    @staticmethod
+    def Jade():
+        return Material(
+            ambient=(0.135, 0.2225, 0.1575),
+            diffuse=(0.54, 0.89, 0.063),
+            specular=(0.316, 0.316, 0.316),
+            shininess=12.8,
+        )
+
+    @staticmethod
+    def Pearl():
+        return Material(
+            ambient=(0.25, 0.207, 0.207),
+            diffuse=(1.0, 0.829, 0.829),
+            specular=(0.296, 0.296, 0.296),
+            shininess=11.264,
+        )
+
+    @staticmethod
+    def BlackRubber():
+        return Material(
+            ambient=(0.02, 0.02, 0.02),
+            diffuse=(0.01, 0.01, 0.01),
+            specular=(0.4, 0.4, 0.4),
+            shininess=10,
+        )
+
+    @staticmethod
+    def BlackPlastic():
+        return Material(
+            ambient=(0.0, 0.0, 0.0),
+            diffuse=(0.01, 0.01, 0.01),
+            specular=(0.5, 0.5, 0.5),
+            shininess=32,
+        )
+
+
 class Mesh(SceneObject):
-    def __init__(self, vertices: np.ndarray, faces: np.ndarray, face_attrs=None, texture=None):
+    def __init__(self, vertices: np.ndarray, faces: np.ndarray, face_attrs=None, textures=None, material=None):
         """
         Initializes a triangle mesh
 
@@ -81,13 +182,14 @@ class Mesh(SceneObject):
             vertices: vertices described as array of shape V x 3 
             faces: faces described as array of shape F x 3
             face_attrs: dict containing values of shape F x A_i x ..., where A_i x ... are arbitrary dimensionalities for the i-th entry in the dict. This models face attributes, e.g. uv coordinates.
-            texture: a texture
+            material:
         """
         super().__init__()
         self.vertices = vertices
         self.faces = faces
         self.face_attrs = {} if face_attrs is None else face_attrs
-        self.texture = texture
+        self.textures = {} if textures is None else textures
+        self.material = material
 
     def vertex_normals(self):
         """
@@ -206,11 +308,21 @@ class Camera(SceneObject):
 
 class DirectionalLight(SceneObject):
 
-    def __init__(self, direction=(1., 0., 0.), color=(1.0, 1.0, 1.0)) -> None:
+    def __init__(self,
+                 direction=(1., 0., 0.),
+                 color=(1.0, 1.0, 1.0),
+                 ambient_intensity=0.1,
+                 diffuse_intensity=0.7,
+                 specular_intensity=0.2
+                 ) -> None:
+
         self.direction = np.array(direction)
         self.color = np.array(color)
-        
+        self.ambient_intensity = ambient_intensity * self.color
+        self.diffuse_intensity = diffuse_intensity * self.color
+        self.specular_intensity = specular_intensity * self.color
 
-class Material:
-
-    def __init__(self, ambient=0.2, diffuse=0.5, specular=0.3, shininess=0.1):
+    def normalized_direction(self):
+        norm = np.linalg.norm(self.direction)
+        assert norm > 1e-6
+        return self.direction / norm
