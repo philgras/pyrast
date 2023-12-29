@@ -1,3 +1,4 @@
+from typing import Tuple, Union
 from .math import rotation_vector_to_matrix, add_rotation_vectors, transform_points
 import numpy as np
 
@@ -12,7 +13,7 @@ class SceneObject:
             location (): 3D translation
             scale (): uniform scale
         """
-        self.R = self.t = self.s = None
+        self.rotation = self.loction = self.scale = None
         self.set_rigid_transfrom(rotation, location, scale)
 
     def set_rigid_transfrom(self, rotation=(0, 0, 0), location=(0, 0, 0), scale=1):
@@ -23,24 +24,24 @@ class SceneObject:
             location (): 3D translation
             scale (): uniform scale
         """
-        self.R = np.array(rotation)
-        self.t = np.array(location)
-        self.s = scale
+        self.rotation = np.array(rotation)
+        self.location = np.array(location)
+        self.scale = scale
 
     def world2object_matrix(self):
         """
         Computes rigid transform from world into object coords.
 
         Returns:
-                 4x4 matrix is in homogeneous coordinates
+                 4x4 matrix in homogeneous coordinates
 
         """
 
         # 3x3
-        R = rotation_vector_to_matrix(self.R).T
+        R = rotation_vector_to_matrix(self.rotation).T
         # 3x1
-        t = self.t[None].T
-        s = 1 / self.s
+        t = self.location[None].T
+        s = 1 / self.scale
 
         RT = np.concatenate([R, -R @ t], axis=1)
         RT[:3, :3] *= s
@@ -54,15 +55,15 @@ class SceneObject:
         Computes rigid transform from object into world coords.
 
         Returns:
-                 4x4 matrix is in homogeneous coordinates
+                 4x4 matrix in homogeneous coordinates
 
         """
 
         # 3x3
-        R = rotation_vector_to_matrix(self.R)
+        R = rotation_vector_to_matrix(self.rotation)
         # 3x1
-        t = self.t[None].T
-        s = self.s
+        t = self.location[None].T
+        s = self.scale
 
         RT = np.concatenate([R, t], axis=1)
         RT[:3, :3] *= s
@@ -73,13 +74,27 @@ class SceneObject:
 
 
 class Material:
-    def __init__(self, ambient=None, diffuse=(0.5, 0.5, 0.5), specular=None,
-                 shininess=16):
+    def __init__(self,
+                 ambient: Union[Tuple, None] = None,
+                 diffuse: Tuple = (0.5, 0.5, 0.5),
+                 specular: Union[Tuple, None] = None,
+                 shininess: float = 16):
+        """
+        Material definition for phong shading.
+        Args:
+            ambient (tuple or None): ambient material color if
+                                     this deviates from the diffuse color
+            diffuse (tuple): diffuse material colors --> not optional 
+            specular (tuple or None): specular material color if 
+                                      this deviates from the diffuse color
+            shininess (float): factor to increase/decrease the shininess of the material
+        """
         self.ambient = np.array(ambient) if ambient is not None else None
         self.diffuse = np.array(diffuse)
         self.specular = np.array(specular) if specular is not None else None
         self.shininess = shininess
 
+    # some example materials
     # material properties taken from
     # http://learnwebgl.brown37.net/10_surface_properties/surface_properties_color.html
     @staticmethod
@@ -227,7 +242,7 @@ class Mesh(SceneObject):
 
 
 class Camera(SceneObject):
-    def __init__(self, f, image_size):
+    def __init__(self, f: float, image_size: Tuple):
         """
         Initializes a camera 
         Args:
@@ -242,7 +257,8 @@ class Camera(SceneObject):
              [0, 0, 1]], dtype=float)
         self.image_size = image_size
 
-    def look_at(self, center, azi, ele, distance):
+    def look_at(self, center: np.ndarray, azi: float,
+                ele: float, distance: float):
         """
         Computes the rigid transform of this camera, such
         that it looks at a point(center) from azimuth, elevation angles on a sphere with radius=distance.
@@ -275,21 +291,30 @@ class Camera(SceneObject):
 
     def project_mesh(self, mesh: Mesh):
         """
-        Projects triangle mesh onto image plane of this camera
+        Projects the vertices of a given triangle mesh onto 
+        the image plane of this camera
 
         Args:
-            mesh (): 
+            mesh: Mesh object to be projected
 
         Returns:
+            V x 3 array containing the projected vertex coordinates
 
         """
         to_world = mesh.object2world_matrix()
         vertices = transform_points(to_world, mesh.vertices)
         return self.project_points(vertices)
 
-    def project_points(self, points):
+    def project_points(self, points: np.ndarray):
         """
-        Points must be in world coordinates
+        Projects points onto the image plane of this camera
+
+        Args:
+            points: B x 3 array containing 3D coordinates
+
+        Returns:
+            B x 3 array containing projected coordinates
+
         """
         to_cam = self.world2view_matrix()
 
@@ -307,7 +332,6 @@ class Camera(SceneObject):
 
 
 class DirectionalLight(SceneObject):
-
     def __init__(self,
                  direction=(1., 0., 0.),
                  color=(1.0, 1.0, 1.0),
@@ -315,14 +339,25 @@ class DirectionalLight(SceneObject):
                  diffuse_intensity=0.7,
                  specular_intensity=0.2
                  ) -> None:
-
+        """
+        Defines a directional light source for phong shading
+        Args:
+            direction: direction vector
+            color: color of the light source
+            ambient_intensity: strength for ambient illumination
+            diffuse_intensity: strength for diffuse illumination
+            specular_intensity: strenght for specular illumination
+        """
         self.direction = np.array(direction)
         self.color = np.array(color)
         self.ambient_intensity = ambient_intensity * self.color
         self.diffuse_intensity = diffuse_intensity * self.color
         self.specular_intensity = specular_intensity * self.color
 
-    def normalized_direction(self):
+    def normalized_direction(self) -> None:
+        """
+        Returns: light direction vector with length 1
+        """
         norm = np.linalg.norm(self.direction)
         assert norm > 1e-6
         return self.direction / norm

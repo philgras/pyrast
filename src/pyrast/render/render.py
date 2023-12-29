@@ -1,16 +1,39 @@
+from pyrast.geometry.scene import *
 from abc import abstractmethod, ABC
 import numpy as np
 
-from pyrast.geometry.scene import *
-
 
 def batch_bilinear_interpolate(points, a, b):
+    """
+    Bilinear interpolation between points according to weights a, b
+    Args:
+        points: array of shape Bx4xD --> second dimension contains
+            (top, left), (top, right), (bottom, left), (bottom, right) points to be
+            interpolated
+        a: interplation weight from left to right of shape B
+        b: interpolation weight from top to bottom of shape B
+
+    Returns: Interpolated points of shape BxD
+
+    """
     a, b = a[:, None, None], b[:, None]
     p_a = points[:, [0, 2], :] * a + points[:, [1, 3], :] * (1 - a)
     return p_a[:, 0, :] * b + p_a[:, 1, :] * (1 - b)
 
 
 def batch_nearest_interpolation(points, a, b):
+    """
+    Nearest-neighbor interpolation between points according to weights a, b
+    Args:
+        points: array of shape Bx4xD --> second dimension contains
+            (top, left), (top, right), (bottom, left), (bottom, right) points to be
+            interpolated
+        a: interplation weight from left to right of shape B
+        b: interpolation weight from top to bottom of shape B
+
+    Returns: Interpolated points of shape BxD
+
+    """
     index = (b > 0.5).astype(int) * 2
     index += (a > 0.5).astype(int)
     return points[np.arange(len(points)), index]
@@ -18,8 +41,19 @@ def batch_nearest_interpolation(points, a, b):
 
 def interpolate_attributes(pix2face, bary_coords, face_attributes):
     """
-    face_attributes: F,3,D => for each vertex in face one D-dimensional attribute
+    Interpolates vertex attributes across triangle face using barycentric
+    coordinates.
+
+    Args:
+        pix2face: face_idx output of the rasterizer of shape HxW
+        bary_coords: barycentric coordinates output of the rasterizer of shape HxWx3
+        face_attributes: vertex attributes of dimensione D grouped for every
+                         triangle face --> shape is Fx3xD
+
+    Returns:
+        array of shape HxWxD
     """
+
     H, W = pix2face.shape
     D = face_attributes.shape[-1]
     res = np.zeros((H, W, D))
@@ -81,22 +115,19 @@ class Shader(ABC):
 
 
 class NormalShader(Shader):
-
     def __init__(self, use_vertex_normals=True):
+        """
+
+        Args:
+            use_vertex_normals (): 
+        """
         self._use_vertex_normals = use_vertex_normals
 
     def __call__(self, mesh: Mesh, pix2face,
                  barycoords, mask_img, **kwargs):
         """
-        Computes normal vector of mesh per rasterized pixel
-        Args:
-            pix2face (): 
-            barycoords (): 
-            mesh: 
-            **kwargs: 
-
-        Returns:
-
+        Per rasterized pixel the normal of the respective surface point
+        is computed.
         """
         outputs = {}
         if self._use_vertex_normals:
@@ -116,8 +147,12 @@ class NormalShader(Shader):
         return outputs
 
 
-class VertexImageShader(Shader):
+class CoordinateShader(Shader):
     def __call__(self, mesh, pix2face, barycoords, mask_img, **kwargs):
+        """
+        Per pixel, the 3D coordinate of the corresponding surface point is 
+        computed.
+        """
         out = np.zeros_like(barycoords)
         mask = mask_img
         face_idx = pix2face[mask]
@@ -126,11 +161,15 @@ class VertexImageShader(Shader):
         points = face_verts * barycoords[mask][..., None]
         points = points.sum(axis=-2)
         out[mask] = points
-        return {"point_img": out}
+        return {"coordinate_img": out}
 
 
 class UVShader(Shader):
     def __call__(self, mesh, pix2face, barycoords, **kwargs):
+        """
+        Per pixel, the uv coordinate of the corresponding surface point is 
+        computed.
+        """
         face_uvs = mesh.face_attrs['face_uvs']
         uv_image = interpolate_attributes(pix2face, barycoords, face_uvs)
         return {"uv_img": uv_image}
@@ -178,6 +217,10 @@ class TextureShader(Shader):
         return res
 
     def __call__(self, mesh, uv_img, pix2face, **kwargs):
+        """
+        Samples textures of the mesh for every rasterized suface point.
+
+        """
         if self.texture_names is None:
             names = list(mesh.textures.keys())
         else:
@@ -192,7 +235,11 @@ class TextureShader(Shader):
 
 
 class PhongShader(Shader):
-    def __call__(self, mesh: Mesh, cam: Camera, light: DirectionalLight, normal_img, point_img, mask_img, **kwargs):
+    def __call__(self, mesh: Mesh, cam: Camera, light: DirectionalLight,
+                 normal_img, coordinate_img, mask_img, **kwargs):
+        """
+        Computes phong shading per pixel.  
+        """
         material = mesh.material
 
         # set the material colors
@@ -225,12 +272,13 @@ class PhongShader(Shader):
         light_direction = light.normalized_direction()[None]
         factor = np.sum(normal * light_direction, axis=-1)
         factor = np.clip(factor, 0, None)
-        out[mask_img] += light.diffuse_intensity[None] * diffuse * factor[..., None]
+        out[mask_img] += light.diffuse_intensity[None] * \
+            diffuse * factor[..., None]
 
         # specular
         # compute view direction
-        points = point_img[mask_img]
-        view_direction = cam.t - points
+        points = coordinate_img[mask_img]
+        view_direction = cam.location - points
         norm = np.linalg.norm(view_direction, axis=-1)
         assert np.all(norm > 1e-5)
         view_direction = view_direction / norm[..., None]

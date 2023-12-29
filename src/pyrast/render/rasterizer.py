@@ -1,9 +1,12 @@
 import numpy as np
-from .quad_tree import QuadNode, get_face_bboxes
+from .quad_tree import QuadTree
 
 
 def edge_function(v0, v1, v2):
     """
+    The edge function is the tool to decide wether 
+    a point lies left or right of an edge.
+
     Computes edge function with broadcasting enabled
     v0, v1, v2 are supposed to be of either shape 1xNx2 or Mx1x2
     result will be MxN
@@ -14,6 +17,15 @@ def edge_function(v0, v1, v2):
 
 
 def rasterize_region(face_verts, pixels, perspective_correct=True):
+    """
+    Rasterizes a tile of pixels
+    Args:
+        face_verts: faces to rasterize of shape Fx3x3
+        pixels: pixel coordinates of shape Px2 can be shaped to the dimension of
+                the respective tile
+        perspective_correct (bool): if true, perspective correction will be applied   
+    Returns: barycentric coordinates, depth, closest_face_idx for every pixel for which a triangle face overlaps with it. -1 otherwise
+    """
     # P x 3, P x 1, P x 1
     # face verts of shape Fx3x3
     # individual vectors of shape Fx3
@@ -95,14 +107,28 @@ def rasterize_region(face_verts, pixels, perspective_correct=True):
 
 
 def rasterize_tree(proj_verts, faces, image_size, tree_depth=4, perspective_correct=True):
+    """
+    Rasterizes a whole image using a tree-based tiling approach. all faces will be assigned to regions they overlap according to their projected vertices. only for these regions they will be considered during rasterization
+    Args:
+        proj_verts: projected vertices of shape V x 3
+        faces: faces array containig indices for proj_verts of shape Fx3 
+        image_size: image size (height, width) in pixels
+        tree_depth: maximum tree depth to split the image region 
+        perspective_correct: if true, perspective correction will be applied 
+
+    Returns:
+        a tuple containing 3 arrays all of shape height x width x ...
+         pix2face -> for every pixel the index of the closest face or -1
+         bary_coords --> bary centric coordinates of the face at the pixels
+         z_buffer --> depth per pixel
+        
+    """
     height, width = image_size
     face_verts = proj_verts[faces]
 
     # create quad tree to only rasterize regions
     # where triangles are located
-    bboxes = get_face_bboxes(face_verts)
-    face_indices = np.arange(len(bboxes))
-    quad_tree = QuadNode(tree_depth, face_indices, bboxes, 0, 0, height, width)
+    quad_tree = QuadTree(face_verts, (0, 0, height, width), tree_depth)
     regions = quad_tree.non_empty_regions()
 
     pix2face = np.zeros(image_size, dtype=int) - 1
@@ -121,7 +147,7 @@ def rasterize_tree(proj_verts, faces, image_size, tree_depth=4, perspective_corr
             perspective_correct
         )
 
-        # correct face indices
+        # correct face indices=
         mask = closest_face > -1
         closest_face[mask] = face_indices[closest_face[mask]]
 
@@ -140,6 +166,6 @@ class Rasterizer:
         self.perspective_correct = perspective_correct
 
     def __call__(self, vertices, faces, tree_depth=4):
-        # transform into normalized space
-        return rasterize_tree(vertices, faces, 
-                              self.image_size, tree_depth, self.perspective_correct)
+        return rasterize_tree(vertices, faces,
+                              self.image_size, tree_depth,
+                              self.perspective_correct)

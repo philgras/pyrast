@@ -3,7 +3,7 @@ import numpy as np
 
 
 class Timer:
-    class TimerContext:
+    class Context:
         def __init__(self, timer, name):
             self.timer = timer
             self.name = name
@@ -18,13 +18,31 @@ class Timer:
         self.times = {}
         self.history = {}
 
-    def section(self, name):
-        return Timer.TimerContext(self, name)
+    def __call__(self, name: str):
+        """
+        Creates timer context to simplify start and stop calls
+        Args:
+            name: Name of the section 
 
-    def start(self, name):
+        Returns: context manager for section
+
+        """
+        return Timer.Context(self, name)
+
+    def start(self, name: str):
+        """
+        Start timer
+        Args:
+            name: section name 
+        """
         self.times[name] = time.perf_counter_ns()
 
-    def stop(self, name):
+    def stop(self, name: str):
+        """
+        Stop timer
+        Args:
+            name: section name 
+        """
         assert name in self.times
         diff = time.perf_counter_ns() - self.times[name]
 
@@ -34,6 +52,15 @@ class Timer:
         return diff
 
     def format_statistics(self, names=None):
+        """
+        Outputs timing statistics
+        Args:
+            names: list of section names or None 
+
+        Returns:
+            String containing summary statistics about the measurements
+
+        """
         header = "{:>20} | {:>10} | {:>10} | {:>10} | {:>10} | {:>10}".format(
             "Section Name", "Total", "Mean", "Std", "Min", "Max"
         )

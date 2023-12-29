@@ -1,8 +1,19 @@
 from pyrast.geometry.scene import Mesh
+from typing import Union
+from pathlib import Path
 import numpy as np
 
 
-def load_obj(filepath):
+def load_obj(filepath: Union[str, Path]) -> Mesh:
+    """
+    Simple obj loader. Loads geometry information and stores them into 
+    Mesh objects
+    Args:
+        filepath: path to obj file
+
+    Returns: Mesh object
+        
+    """
     with open(filepath, 'r') as f:
         lines = f.readlines()
 
