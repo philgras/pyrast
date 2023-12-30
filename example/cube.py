@@ -1,5 +1,4 @@
-from pyrast.geometry.scene import Camera, DirectionalLight, Material
-from pyrast.geometry.generate import create_cube, create_checkerboard_texture
+from pyrast.geometry import *
 from pyrast.render import *
 
 import matplotlib.pyplot as plt
@@ -24,7 +23,7 @@ render = Render(
     ]
 )
 
-light = DirectionalLight(direction=(0.3, 0., 1.), color=(1.,1.,1.))
+light = DirectionalLight(direction=(0.3, 0., 1.), color=(1., 1., 1.))
 
 out = render(mesh, cam, light)
 

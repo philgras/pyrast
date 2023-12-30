@@ -1,4 +1,4 @@
-from pyrast.geometry.scene import Camera, DirectionalLight, Material
+from pyrast.geometry import Camera, DirectionalLight, Material
 from pyrast.render import *
 from pyrast.util.io import load_obj
 
@@ -26,7 +26,6 @@ render = Render(
     shaders=[
         NormalShader(),
         UVShader(),
-        TextureShader(),
         CoordinateShader(),
         PhongShader()
     ]

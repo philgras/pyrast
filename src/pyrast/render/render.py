@@ -270,8 +270,8 @@ class PhongShader(Shader):
 
         # diffuse
         light_direction = light.normalized_direction()[None]
-        factor = np.sum(normal * light_direction, axis=-1)
-        factor = np.clip(factor, 0, None)
+        LN = np.sum(normal * light_direction, axis=-1)
+        factor = np.clip(LN, 0, None)
         out[mask_img] += light.diffuse_intensity[None] * \
             diffuse * factor[..., None]
 
@@ -284,20 +284,20 @@ class PhongShader(Shader):
         view_direction = view_direction / norm[..., None]
 
         # compute reflect direction
-        reflect_direction = 2 * factor[..., None] * normal - light_direction
+        reflect_direction = 2 * LN[..., None] * normal - light_direction
         norm = np.linalg.norm(reflect_direction, axis=-1)
         assert np.all(norm > 1e-5)
         reflect_direction = reflect_direction / norm[..., None]
 
         # compute specular
-        factor = np.sum(view_direction * reflect_direction,
+        backface_mask = LN == 0
+        VR = np.sum(view_direction * reflect_direction,
                         axis=-1)
-        factor = np.clip(factor, 0, None) ** shininess
+        factor = np.clip(VR, 0, None) ** shininess
+        factor[backface_mask] = 0
         normalizer = (shininess + 2) / 2 * np.pi
 
         out[mask_img] += normalizer * light.specular_intensity[None] * \
             specular * factor[..., None]
-        out2 = np.zeros_like(out[..., 0])
-        out2[mask_img] = factor
 
         return {"shaded_img": np.clip(out, 0., 1.)}
