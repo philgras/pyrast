@@ -2,12 +2,17 @@ from pyrast.geometry import Camera, DirectionalLight, Material
 from pyrast.render import *
 from pyrast.util.io import load_obj
 
+from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 import numpy as np
 
+# get obj filename from commandline
+parser = ArgumentParser()
+parser.add_argument("--file")
+args = parser.parse_args()
 
 # load mesh and set material
-mesh = load_obj("./example/suzanne.obj")
+mesh = load_obj(args.file)
 material = Material.Pearl()
 mesh.material = material
 
