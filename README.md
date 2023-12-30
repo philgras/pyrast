@@ -2,6 +2,7 @@
 A small library for 3D rendering in Python soley based on numpy.
 It provides APIs to model scene geometry (meshes, lights, materials, cameras), perform rasterization, shading, texture sampling and rudimentary .obj file loading and timing.
 As the implementation is purely numpy-based, the rendering is not accelerated by a GPU and in consequence not real-time.
+![out](https://github.com/philgras/pyrast/assets/13590652/00fbb51b-d6a8-420e-a515-447b0ed65c06)
 
 # Installation
 pyrast can be installed with pip as every other package. Numpy is the only dependency.
@@ -67,7 +68,7 @@ More examples are in the `./examples` folder.
 
 # Disclaimer
 This library was written as part of my freetime project to learn more about rasterization.
-Throughout the project, I found some insightful material on learnopengl.com and scratchapixel.com.
+Throughout the project, I found some insightful material on [learnopengl](https://learnopengl.com/) and [scratchapixel](https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/overview-rasterization-algorithm.html).
 In case, you would also want to learn about the topic, I can recommend both.
 They are really helpful. 
 
